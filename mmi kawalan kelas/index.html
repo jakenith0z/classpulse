@@ -1,0 +1,954 @@
+<!DOCTYPE html>
+<html lang="ms">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>ClassPulse — Papan Kawalan Kelas</title>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/qrcodejs/1.0.0/qrcode.min.js"></script>
+<style>
+  :root{
+    --green:#1fae5c; --green-bg:#e7f7ee; --green-line:#bfe9d2;
+    --red:#e0405a; --red-bg:#fdecef; --red-line:#f6c3cd;
+    --purple:#8b5cf6; --purple-bg:#f2edfe; --purple-line:#dccffb;
+    --blue:#2f8fe0; --blue-bg:#eaf4fd; --blue-line:#bcdff8;
+    --ink:#16233a; --ink-soft:#5b6b85; --paper:#f6f7fb; --line:#e2e6ef;
+    --cream:#fdf6e3; --cream-line:#f1e2ba;
+    --gold:#f5a623; --white:#ffffff;
+    --radius:16px; --radius-sm:10px;
+    --shadow:0 2px 10px rgba(22,35,58,.06);
+    --shadow-lg:0 18px 50px rgba(22,35,58,.22);
+  }
+  *{box-sizing:border-box}
+  body{margin:0;font-family:'Segoe UI',system-ui,-apple-system,sans-serif;background:var(--paper);color:var(--ink)}
+  .app{display:flex;flex-direction:column;height:100vh}
+
+  /* ===== HEADER ===== */
+  header{display:flex;align-items:center;justify-content:space-between;gap:16px;
+    padding:14px 22px;background:#fff;border-bottom:1px solid var(--line);flex-wrap:wrap}
+  .brand{display:flex;align-items:center;gap:10px;font-weight:800;font-size:19px}
+  .brand .dot-logo{width:34px;height:34px;border-radius:10px;background:linear-gradient(135deg,#3b5bfd,#7aa2ff);
+    display:flex;align-items:center;justify-content:center;color:#fff;font-size:16px}
+  .live-pill{display:inline-flex;align-items:center;gap:6px;background:var(--green-bg);color:var(--green);
+    border:1px solid var(--green-line);border-radius:999px;padding:4px 12px;font-size:12px;font-weight:700}
+  .live-pill .blip{width:8px;height:8px;border-radius:50%;background:var(--green);animation:pulse 1.4s infinite}
+  @keyframes pulse{0%{box-shadow:0 0 0 0 rgba(31,174,92,.55)}70%{box-shadow:0 0 0 8px rgba(31,174,92,0)}100%{box-shadow:0 0 0 0 rgba(31,174,92,0)}}
+  h1.title{font-size:22px;letter-spacing:.5px;margin:0;font-weight:800;text-align:center;flex:1;min-width:240px}
+  .clock-pill{display:flex;align-items:center;gap:8px;background:var(--paper);border:1px solid var(--line);
+    border-radius:999px;padding:8px 16px;font-weight:700;font-size:13px;white-space:nowrap}
+
+  /* ===== STATS + SEARCH ===== */
+  .toolbar{display:flex;align-items:center;gap:10px;padding:12px 22px;background:#fff;border-bottom:1px solid var(--line);flex-wrap:wrap}
+  .stat-pill{display:inline-flex;align-items:center;gap:6px;border-radius:999px;padding:6px 14px;font-size:12.5px;font-weight:800;border:1px solid transparent}
+  .stat-pill.green{background:var(--green-bg);color:var(--green);border-color:var(--green-line)}
+  .stat-pill.blue{background:var(--blue-bg);color:var(--blue);border-color:var(--blue-line)}
+  .stat-pill.purple{background:var(--purple-bg);color:var(--purple);border-color:var(--purple-line)}
+  .stat-pill.red{background:var(--red-bg);color:var(--red);border-color:var(--red-line)}
+  .search-wrap{margin-left:auto;position:relative;min-width:240px;flex:1;max-width:340px}
+  .search-wrap input{width:100%;padding:9px 14px 9px 34px;border-radius:999px;border:1px solid var(--line);
+    background:var(--paper);font-size:13px;outline:none}
+  .search-wrap input:focus{border-color:#93a9ff}
+  .search-wrap:before{content:'🔍';position:absolute;left:12px;top:50%;transform:translateY(-50%);font-size:12px;opacity:.6}
+
+  /* ===== BODY LAYOUT ===== */
+  .board{flex:1;display:flex;overflow:hidden;position:relative}
+  .col-classes{flex:1.55;overflow:auto;padding:22px;transform-origin:top left}
+  .col-rooms{flex:1;overflow:auto;padding:22px;background:var(--cream);border-left:1px solid var(--cream-line)}
+  .year-block{margin-bottom:26px}
+  .year-label{font-weight:800;color:#3b5bfd;letter-spacing:.5px;margin-bottom:10px;font-size:14px}
+  .grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(180px,1fr));gap:14px}
+
+  /* ===== CARDS ===== */
+  .card{border-radius:var(--radius);overflow:hidden;border:2px solid transparent;background:#fff;
+    box-shadow:var(--shadow);cursor:pointer;transition:transform .12s ease, box-shadow .12s ease;display:flex;flex-direction:column}
+  .card:hover{transform:translateY(-2px);box-shadow:var(--shadow-lg)}
+  .card.dim{opacity:.32;pointer-events:none}
+  .card.alert{border-color:#f6a9b8;animation:alertGlow 2s infinite}
+  @keyframes alertGlow{0%,100%{box-shadow:var(--shadow)}50%{box-shadow:0 0 0 5px rgba(224,64,90,.14)}}
+  .card-head{padding:9px 10px;text-align:center;font-weight:800;font-size:13.5px;color:#fff}
+  .card-head.green{background:var(--green)} .card-head.red{background:var(--red)}
+  .card-head.blue{background:var(--blue)} .card-head.purple{background:var(--purple)}
+  .card-body{padding:12px 10px 14px;text-align:center;flex:1;display:flex;flex-direction:column;gap:4px;align-items:center}
+  .card-icon{font-size:24px;line-height:1}
+  .card-teacher{font-weight:800;font-size:12.5px;color:var(--ink)}
+  .card-subject{font-size:11.5px;color:#3b5bfd;font-weight:700}
+  .card-status{font-size:10.5px;font-weight:700;display:flex;align-items:center;gap:4px;margin-top:2px}
+  .card-status.green{color:var(--green)} .card-status.red{color:var(--red)}
+  .card-status.blue{color:var(--blue)} .card-status.purple{color:var(--purple)}
+  .card-substatus{font-size:10px;color:var(--ink-soft)}
+
+  .room-card .card-body{gap:3px;padding:14px 10px}
+  .room-name{display:flex;align-items:center;justify-content:center;gap:6px;font-weight:800;font-size:12.5px;
+    padding:8px 8px;border-bottom:1px solid var(--cream-line);background:#fff}
+  .room-empty-icon{font-size:20px;margin-top:4px}
+
+  /* ===== ZOOM CONTROLS ===== */
+  .zoom-ctrl{position:absolute;left:16px;bottom:16px;display:flex;flex-direction:column;gap:6px;z-index:5}
+  .zoom-ctrl button{width:38px;height:38px;border-radius:12px;border:1px solid var(--line);background:#fff;
+    box-shadow:var(--shadow);font-size:16px;font-weight:800;cursor:pointer;color:var(--ink)}
+  .zoom-ctrl button:hover{background:var(--paper)}
+
+  /* ===== QR FLOATING BUTTON ===== */
+  .qr-btn{position:absolute;right:24px;bottom:20px;z-index:5;background:var(--gold);color:#3a2a00;
+    border:none;border-radius:999px;padding:14px 22px;font-weight:800;font-size:14px;
+    box-shadow:0 10px 24px rgba(245,166,35,.45);cursor:pointer;display:flex;align-items:center;gap:8px}
+  .qr-btn:hover{filter:brightness(1.05)}
+
+  /* ===== SIDE PANEL ===== */
+  .overlay{position:fixed;inset:0;background:rgba(15,20,35,.35);opacity:0;pointer-events:none;
+    transition:opacity .18s ease;z-index:20}
+  .overlay.show{opacity:1;pointer-events:auto}
+  .panel{position:fixed;top:0;right:0;height:100%;width:380px;max-width:92vw;background:#fff;
+    box-shadow:-16px 0 40px rgba(0,0,0,.15);transform:translateX(100%);transition:transform .22s ease;
+    z-index:21;display:flex;flex-direction:column;padding:22px}
+  .panel.show{transform:translateX(0)}
+  .panel-head{display:flex;align-items:center;justify-content:space-between;margin-bottom:14px}
+  .panel-head h2{margin:0;font-size:20px;display:flex;align-items:center;gap:8px}
+  .panel-close{border:none;background:var(--paper);width:32px;height:32px;border-radius:10px;font-size:15px;cursor:pointer}
+  .status-badge{display:inline-flex;align-items:center;gap:6px;border-radius:999px;padding:6px 14px;
+    font-weight:800;font-size:12px;margin-bottom:16px;width:fit-content}
+  .field{border:1px solid var(--line);border-radius:12px;padding:12px 14px;margin-bottom:10px}
+  .field .label{font-size:10.5px;font-weight:800;color:var(--ink-soft);letter-spacing:.5px;margin-bottom:4px}
+  .field .value{font-size:14.5px;font-weight:700}
+  .field.accent{background:var(--green-bg);border-color:var(--green-line)}
+  .field.accent-blue{background:var(--blue-bg);border-color:var(--blue-line)}
+
+  /* ===== MODAL (QR check-in) ===== */
+  .modal{position:fixed;inset:0;display:flex;align-items:center;justify-content:center;z-index:30;
+    opacity:0;pointer-events:none;transition:opacity .18s ease}
+  .modal.show{opacity:1;pointer-events:auto}
+  .modal-card{background:#fff;border-radius:20px;padding:26px;width:400px;max-width:92vw;box-shadow:var(--shadow-lg)}
+  .modal-head{display:flex;align-items:center;justify-content:space-between;margin-bottom:16px}
+  .modal-head h2{margin:0;font-size:19px}
+  .form-row{margin-bottom:12px}
+  .form-row label{display:block;font-size:11px;font-weight:800;color:var(--ink-soft);letter-spacing:.4px;margin-bottom:5px}
+  .form-row select{width:100%;padding:11px 12px;border-radius:10px;border:1.5px solid var(--line);
+    font-size:14px;background:#fff;font-weight:600;color:var(--ink)}
+  .btn-checkin{width:100%;background:var(--green);color:#fff;border:none;border-radius:12px;padding:13px;
+    font-weight:800;font-size:15px;cursor:pointer;margin-top:8px}
+  .btn-checkin:hover{background:#189151}
+  .toast{position:fixed;top:20px;left:50%;transform:translateX(-50%) translateY(-20px);background:var(--ink);
+    color:#fff;padding:12px 20px;border-radius:12px;font-size:13.5px;font-weight:700;z-index:40;opacity:0;
+    transition:all .25s ease;pointer-events:none}
+  .toast.show{opacity:1;transform:translateX(-50%) translateY(0)}
+
+  .live-pill.offline{background:#fff7e6;color:#b8790f;border-color:#f1dfa9}
+  .live-pill.offline .blip{background:#b8790f;animation:none}
+
+  .qr-tile{border:1px solid var(--line);border-radius:12px;padding:12px;text-align:center}
+  .qr-tile img{width:100%;max-width:150px}
+  .qr-tile .qr-label{font-weight:800;font-size:13px;margin-top:6px}
+
+  @media print{
+    body *{visibility:hidden}
+    #printQrModal, #printQrModal *{visibility:visible}
+    #printQrModal{position:absolute;top:0;left:0;width:100%}
+    #printQrModal .modal-head, #printQrModal p, #printQrNow{display:none}
+    .qr-tile{break-inside:avoid}
+  }
+
+  @media(max-width:820px){
+    .board{flex-direction:column}
+    .col-rooms{border-left:none;border-top:1px solid var(--cream-line)}
+  }
+</style>
+</head>
+<body>
+<div class="app">
+
+  <header>
+    <div class="brand">
+      <div class="dot-logo">⚡</div>
+      ClassPulse
+      <span class="live-pill" id="livePill"><span class="blip"></span><span id="livePillText">LIVE PdPc</span></span>
+    </div>
+    <h1 class="title" id="boardTitle">SK KAMPONG AWAT · REKOD KAWALAN KELAS</h1>
+    <div style="display:flex;align-items:center;gap:8px">
+      <div class="clock-pill">📅 <span id="dayLabel"></span> · <span id="timeLabel"></span> · <span id="slotLabel"></span></div>
+      <button id="teachersBtn" title="Urus Senarai Guru" style="border:1px solid var(--line);background:#fff;border-radius:10px;width:38px;height:38px;font-size:16px;cursor:pointer;">👥</button>
+      <button id="settingsBtn" title="Tetapan Sambungan Google Sheet" style="border:1px solid var(--line);background:#fff;border-radius:10px;width:38px;height:38px;font-size:16px;cursor:pointer;">⚙️</button>
+    </div>
+  </header>
+
+  <div class="toolbar">
+    <span class="stat-pill green">🧑‍🏫 <span id="statAda">0</span> ADA GURU</span>
+    <span class="stat-pill blue">🚶 <span id="statPindah">0</span> BERPINDAH</span>
+    <span class="stat-pill purple">🔄 <span id="statRelief">0</span> RELIEF</span>
+    <span class="stat-pill red">⚠️ <span id="statTiada">0</span> TIADA GURU</span>
+    <div class="search-wrap">
+      <input id="searchBox" type="text" placeholder="Cari Guru, Kelas atau Bilik Khas...">
+    </div>
+  </div>
+
+  <div class="board">
+    <div class="col-classes" id="colClasses"></div>
+    <div class="col-rooms" id="colRooms"></div>
+
+    <div class="zoom-ctrl">
+      <button id="zoomIn">+</button>
+      <button id="zoomOut">−</button>
+      <button id="zoomReset">⟲</button>
+    </div>
+
+    <button class="qr-btn" id="openQrBtn">▦ Imbas QR Check-in</button>
+    <button class="qr-btn" id="printQrBtn" style="right:230px;background:var(--blue);color:#fff;box-shadow:0 10px 24px rgba(47,143,224,.4)">🖨️ Cetak QR Kelas</button>
+  </div>
+</div>
+
+<!-- TEACHER MANAGEMENT MODAL -->
+<div class="modal" id="teacherModal">
+  <div class="modal-card">
+    <div class="modal-head">
+      <h2>👥 Urus Senarai Guru</h2>
+      <button class="panel-close" id="teacherClose">✕</button>
+    </div>
+    <div class="form-row" style="display:flex;gap:8px;align-items:flex-end">
+      <div style="flex:1">
+        <label>NAMA GURU BAHARU</label>
+        <input id="newTeacherInput" type="text" placeholder="Taip nama penuh guru..."
+          style="width:100%;padding:11px 12px;border-radius:10px;border:1.5px solid var(--line);font-size:13px;">
+      </div>
+      <button class="btn-checkin" id="addTeacherBtn" style="width:auto;padding:11px 16px;margin-top:0">➕ Tambah</button>
+    </div>
+    <div id="teacherListWrap" style="max-height:280px;overflow:auto;margin-top:14px;display:flex;flex-direction:column;gap:6px"></div>
+  </div>
+</div>
+
+<!-- PRINT QR MODAL -->
+<div class="modal" id="printQrModal">
+  <div class="modal-card" style="width:640px;max-height:85vh;overflow:auto">
+    <div class="modal-head">
+      <h2>🖨️ Kod QR Setiap Kelas</h2>
+      <button class="panel-close" id="printQrClose">✕</button>
+    </div>
+    <p style="font-size:12.5px;color:var(--ink-soft);margin-top:0">
+      Cetak dan tampal setiap kod QR di pintu kelas berkenaan. Guru imbas kod ini dengan
+      alat pengimbas (barcode/QR scanner) semasa masuk kelas — papan akan terus buka borang check-in untuk kelas tersebut.
+    </p>
+    <div id="qrGrid" style="display:grid;grid-template-columns:repeat(3,1fr);gap:16px;margin:14px 0"></div>
+    <button class="btn-checkin" id="printQrNow">🖨️ Cetak Sekarang</button>
+  </div>
+</div>
+
+<div class="overlay" id="overlay"></div>
+
+<!-- DETAIL PANEL -->
+<div class="panel" id="detailPanel">
+  <div class="panel-head">
+    <h2 id="dpTitle"></h2>
+    <button class="panel-close" id="dpClose">✕</button>
+  </div>
+  <div class="status-badge" id="dpStatusBadge"></div>
+  <div class="field"><div class="label">GURU BERTUGAS</div><div class="value" id="dpTeacher">—</div></div>
+  <div class="field"><div class="label">MATA PELAJARAN</div><div class="value" id="dpSubject">—</div></div>
+  <div class="field"><div class="label">LOKASI SEMASA PDPC</div><div class="value" id="dpLocation">—</div></div>
+  <div class="field" id="dpPresenceField"><div class="label">STATUS KEBERADAAN</div><div class="value" id="dpPresence">—</div></div>
+  <div class="field accent" id="dpNoteField"><div class="label">STATUS PEMBELAJARAN</div><div class="value" id="dpNote">—</div></div>
+  <div id="dpActions" style="display:flex;flex-direction:column;gap:8px;margin-top:6px;"></div>
+</div>
+
+<!-- QR CHECK-IN MODAL -->
+<div class="modal" id="qrModal">
+  <div class="modal-card">
+    <div class="modal-head">
+      <h2>Simulasi QR Check-In</h2>
+      <button class="panel-close" id="qrClose">✕</button>
+    </div>
+    <div class="form-row">
+      <label>LOKASI QR DIIMBAS</label>
+      <select id="qrRoom"></select>
+    </div>
+    <div class="form-row">
+      <label>NAMA GURU</label>
+      <select id="qrTeacher"></select>
+    </div>
+    <div class="form-row">
+      <label>MATA PELAJARAN</label>
+      <select id="qrSubject"></select>
+    </div>
+    <div class="form-row">
+      <label>JENIS SESI</label>
+      <select id="qrSession">
+        <option>Normal</option>
+        <option>Guru Ganti (Relief)</option>
+        <option>Berpindah</option>
+      </select>
+    </div>
+    <div class="form-row" id="qrBerpindahRow" style="display:none">
+      <label>BERPINDAH KE BILIK</label>
+      <select id="qrBerpindahLocation"></select>
+    </div>
+    <button class="btn-checkin" id="qrSubmit">Check-In Sekarang ✓</button>
+  </div>
+</div>
+
+<!-- SETTINGS MODAL — sambungan Google Sheet -->
+<div class="modal" id="settingsModal">
+  <div class="modal-card">
+    <div class="modal-head">
+      <h2>⚙️ Tetapan Sambungan Google Sheet</h2>
+      <button class="panel-close" id="settingsClose">✕</button>
+    </div>
+    <div class="form-row">
+      <label>PAUTAN WEB APP GOOGLE APPS SCRIPT</label>
+      <input id="gasUrlInput" type="text" placeholder="https://script.google.com/macros/s/AKfycb.../exec"
+        style="width:100%;padding:11px 12px;border-radius:10px;border:1.5px solid var(--line);font-size:13px;">
+    </div>
+    <button class="btn-checkin" id="settingsSave">Simpan ✓</button>
+    <button class="btn-checkin" id="settingsReset" style="background:var(--red);margin-top:8px">🔄 Reset Papan ke Kosong</button>
+    <p style="font-size:11.5px;color:var(--ink-soft);margin-top:10px;line-height:1.5">
+      Tampal pautan Web App (URL berakhir dengan <b>/exec</b>) yang dijana selepas anda "Deploy" Apps Script.
+      Kosongkan medan ini dan simpan untuk kembali ke Mod Tempatan (data hanya di peranti ini sahaja, tidak dikongsi).
+    </p>
+  </div>
+</div>
+
+<div class="toast" id="toast"></div>
+
+<script>
+/* =========================================================
+   1. CONFIG — rooms, teachers, subjects
+   ========================================================= */
+const ROOMS = [
+  {id:'t1',name:'1 Firuz',kind:'classroom',year:1},
+  {id:'t2',name:'2 Mutiara',kind:'classroom',year:2},
+  {id:'t3',name:'3 Kristal',kind:'classroom',year:3},
+  {id:'t4',name:'4 Delima',kind:'classroom',year:4},
+  {id:'t5',name:'5 Zamrud',kind:'classroom',year:5},
+  {id:'t6',name:'6 Berlian',kind:'classroom',year:6},
+  {id:'sains',name:'Makmal Sains',kind:'special',icon:'🧪'},
+  {id:'komp',name:'Makmal Komputer',kind:'special',icon:'💻'},
+  {id:'sumber',name:'Pusat Sumber',kind:'special',icon:'📚'},
+  {id:'muzik',name:'Bilik Muzik',kind:'special',icon:'🎵'},
+  {id:'rbt',name:'Bengkel RBT',kind:'special',icon:'🛠️'},
+  {id:'seni',name:'Bilik Seni',kind:'special',icon:'🎨'},
+  {id:'agama',name:'Bilik Agama',kind:'special',icon:'🕌'},
+  {id:'dewan',name:'Dewan Utama',kind:'special',icon:'🏛️'},
+  {id:'padang',name:'Padang Sukan',kind:'special',icon:'⚽'},
+];
+
+const DEFAULT_TEACHERS = [
+  'Muhammad Zuraimi Bin Adi Sin',
+  'Juliakha Binti Sheik Pahlawan',
+  'Nilam Binti Mohamed',
+  'Mohamad Faizuldin Bin Md.Lasim',
+  'Raja Muhammad Azri Bin Raja Ismail',
+  'Muhammad Fayadh Bin Azizan',
+  'Nur Syuhada Binti Abdul Ghani Bikiri',
+  'Mohd Nazri Bin Mustafar',
+  'Nur Farhani Binti Mohamad',
+  'Nik Farah Nazirah Binti Yusof',
+  'Nurul Aida Binti Noor Azman'
+];
+const TEACHERS_KEY = 'classpulse_teachers';
+/* TEACHERS boleh diurus (tambah/padam) terus dalam papan melalui butang 👥.
+   Bila disambung ke Google Sheet, senarai disimpan dalam tab "Teachers" dan
+   dikongsi merentasi semua peranti; jika Mod Tempatan, disimpan localStorage
+   peranti ini sahaja. */
+let TEACHERS = JSON.parse(localStorage.getItem(TEACHERS_KEY) || 'null') || [...DEFAULT_TEACHERS];
+
+const SUBJECTS = ['Bahasa Melayu','Matematik','Pendidikan Islam','Sejarah','Bahasa Inggeris',
+  'Sains','Reka Bentuk & Teknologi','Pendidikan Seni Visual'];
+
+/* =========================================================
+   2. LIVE STATE — disambungkan ke Google Sheet melalui
+      Google Apps Script Web App (GET = baca, POST = tulis).
+      GAS_URL disimpan dalam localStorage (bukan data kelas —
+      hanya konfigurasi pautan) supaya boleh ditetapkan terus
+      dalam papan melalui butang ⚙️ Tetapan.
+   ========================================================= */
+const GAS_URL_KEY = 'classpulse_gas_url';
+let GAS_URL = localStorage.getItem(GAS_URL_KEY) || '';
+
+function defaultState(){
+  const empty = {};
+  ROOMS.filter(r=>r.kind==='classroom').forEach(r=>{
+    empty[r.id] = {status:'TIADA_GURU', teacher:null, subject:null};
+  });
+  return empty;
+}
+
+let state = defaultState();
+let zoom = 1;
+
+async function refreshState(){
+  if(!GAS_URL){ updateConnectionPill(); render(); return; }
+  try{
+    const res = await fetch(GAS_URL);
+    const data = await res.json();
+    if(data && Object.keys(data).length){ state = data; }
+    updateConnectionPill(true);
+  }catch(err){
+    console.error('Gagal memuatkan data dari Google Sheet:', err);
+    updateConnectionPill(false);
+    showToast('⚠️ Gagal sambung ke Google Sheet — papar data terkini yang tersedia');
+  }
+  render();
+}
+
+/* Hantar satu kemaskini bilik ke Google Sheet. Kemaskini tempatan
+   dibuat serta-merta (optimistic) supaya papan terus responsif. */
+async function saveRoom(roomId, entry){
+  state[roomId] = entry;
+  if(!GAS_URL) return;
+  try{
+    await fetch(GAS_URL, {
+      method: 'POST',
+      body: JSON.stringify({roomId, ...entry})
+    });
+  }catch(err){
+    console.error('Gagal simpan ke Google Sheet:', err);
+    showToast('⚠️ Gagal simpan ke Google Sheet — semak sambungan internet');
+  }
+}
+
+function updateConnectionPill(ok){
+  const pill = document.getElementById('livePill');
+  const text = document.getElementById('livePillText');
+  if(!GAS_URL){
+    pill.classList.add('offline');
+    text.textContent = 'MODE TEMPATAN';
+  } else if(ok === false){
+    pill.classList.add('offline');
+    text.textContent = 'SAMBUNGAN TERPUTUS';
+  } else {
+    pill.classList.remove('offline');
+    text.textContent = 'LIVE PdPc';
+  }
+}
+
+/* =========================================================
+   3. DERIVED HELPERS
+   ========================================================= */
+const STATUS_META = {
+  ADA_GURU:  {color:'green', label:'ADA GURU MENGAJAR', icon:'✅'},
+  TIADA_GURU:{color:'red',   label:'TIADA GURU LAGI!',   icon:'⚠️'},
+  RELIEF:    {color:'purple',label:'ADA GURU GANTI',     icon:'🔄'},
+  BERPINDAH: {color:'blue',  label:'BERPINDAH KE',       icon:'🚶'},
+};
+
+function roomOf(id){ return ROOMS.find(r=>r.id===id); }
+
+function classesByYear(year){ return ROOMS.filter(r=>r.kind==='classroom' && r.year===year); }
+
+function specialRoomOccupant(roomId){
+  // find a classroom whose live_state says it moved into this special room
+  return Object.entries(state).find(([cid, s]) => s.status==='BERPINDAH' && s.location===roomId);
+}
+
+function computeStats(){
+  const counts = {ADA_GURU:0, BERPINDAH:0, RELIEF:0, TIADA_GURU:0};
+  Object.values(state).forEach(s=>{ if(counts[s.status]!==undefined) counts[s.status]++; });
+  return counts;
+}
+
+/* =========================================================
+   4. RENDER
+   ========================================================= */
+function render(){
+  renderStats();
+  renderClassGrid();
+  renderRoomGrid();
+  populateQrForm();
+  applyFilter(document.getElementById('searchBox').value);
+}
+
+function renderStats(){
+  const c = computeStats();
+  document.getElementById('statAda').textContent = c.ADA_GURU;
+  document.getElementById('statPindah').textContent = c.BERPINDAH;
+  document.getElementById('statRelief').textContent = c.RELIEF;
+  document.getElementById('statTiada').textContent = c.TIADA_GURU;
+}
+
+function renderClassGrid(){
+  const col = document.getElementById('colClasses');
+  col.innerHTML = '';
+  [1,2,3,4,5,6].forEach(year=>{
+    const block = document.createElement('div');
+    block.className = 'year-block';
+    block.innerHTML = `<div class="year-label">TAHUN ${year}</div>`;
+    const grid = document.createElement('div');
+    grid.className = 'grid';
+    classesByYear(year).forEach(room=>{
+      grid.appendChild(classCard(room));
+    });
+    block.appendChild(grid);
+    col.appendChild(block);
+  });
+}
+
+function classCard(room){
+  const s = state[room.id];
+  const meta = STATUS_META[s.status];
+  const card = document.createElement('div');
+  card.className = 'card' + (s.status==='TIADA_GURU' ? ' alert' : '');
+  card.dataset.search = (room.name + ' ' + (s.teacher||'') + ' ' + (s.subject||'')).toLowerCase();
+
+  let bodyHtml = '';
+  if(s.status === 'TIADA_GURU'){
+    bodyHtml = `
+      <div class="card-icon">📖</div>
+      <div class="card-status red">TIADA GURU LAGI!</div>
+      <div class="card-substatus">⚠️ Belum Check-in</div>`;
+  } else if(s.status === 'BERPINDAH'){
+    const dest = roomOf(s.location);
+    bodyHtml = `
+      <div class="card-icon">🚶</div>
+      <div class="card-status blue">BERPINDAH KE:</div>
+      <div class="card-teacher">${dest ? dest.name : ''}</div>
+      <div class="card-substatus">${s.teacher} (${s.subject})</div>`;
+  } else {
+    bodyHtml = `
+      <div class="card-icon">🧑‍🏫</div>
+      <div class="card-teacher">${s.teacher.toUpperCase()}</div>
+      <div class="card-subject">${s.subject}</div>
+      <div class="card-status ${meta.color}">${meta.icon} ${s.status==='RELIEF' ? 'ADA GURU GANTI' : 'ADA GURU MENGAJAR'}</div>`;
+  }
+
+  card.innerHTML = `<div class="card-head ${meta.color}">${room.name}</div><div class="card-body">${bodyHtml}</div>`;
+  card.addEventListener('click', ()=> openClassDetail(room.id));
+  return card;
+}
+
+function renderRoomGrid(){
+  const col = document.getElementById('colRooms');
+  col.innerHTML = '';
+  const grid = document.createElement('div');
+  grid.className = 'grid';
+  ROOMS.filter(r=>r.kind==='special').forEach(room=>{
+    grid.appendChild(specialRoomCard(room));
+  });
+  col.appendChild(grid);
+}
+
+function specialRoomCard(room){
+  const occ = specialRoomOccupant(room.id);
+  const card = document.createElement('div');
+  card.className = 'card room-card';
+  card.dataset.search = (room.name + ' ' + (occ ? state[occ[0]].teacher : '')).toLowerCase();
+
+  let bodyHtml;
+  if(occ){
+    const [classId, s] = occ;
+    const cls = roomOf(classId);
+    bodyHtml = `
+      <div class="card-status blue" style="justify-content:center">SEDANG MEMBAWA: ${cls.name}</div>
+      <div class="card-teacher">${s.teacher.toUpperCase()}</div>
+      <div class="card-subject">${s.subject} • SEDANG BERLANGSUNG</div>`;
+  } else {
+    bodyHtml = `
+      <div class="room-empty-icon">✨</div>
+      <div class="card-status" style="color:var(--gold);justify-content:center">BILIK KOSONG</div>
+      <div class="card-substatus">Sedia Digunakan</div>`;
+  }
+
+  card.innerHTML = `<div class="room-name">${room.icon} ${room.name}</div><div class="card-body">${bodyHtml}</div>`;
+  card.addEventListener('click', ()=> openRoomDetail(room.id));
+  return card;
+}
+
+/* =========================================================
+   5. DETAIL PANEL
+   ========================================================= */
+function openClassDetail(roomId){
+  const room = roomOf(roomId);
+  const s = state[roomId];
+  const meta = STATUS_META[s.status];
+
+  document.getElementById('dpTitle').textContent = room.name;
+  const badge = document.getElementById('dpStatusBadge');
+  badge.textContent = meta.icon + ' ' + (s.status==='RELIEF' ? 'ADA GURU GANTI' : s.status==='BERPINDAH' ? 'BERPINDAH' : meta.label);
+  badge.style.background = `var(--${meta.color}-bg)`;
+  badge.style.color = `var(--${meta.color})`;
+
+  document.getElementById('dpTeacher').textContent = s.teacher || 'Belum ditetapkan';
+  document.getElementById('dpSubject').textContent = s.subject || '—';
+
+  if(s.status === 'BERPINDAH'){
+    const dest = roomOf(s.location);
+    document.getElementById('dpLocation').textContent = dest.name;
+    document.getElementById('dpPresence').textContent = '🚶 PdPc Dipindahkan';
+    document.getElementById('dpNote').textContent = `Kelas sedang menjalani PdPc di ${dest.name}.`;
+  } else if(s.status === 'TIADA_GURU'){
+    document.getElementById('dpLocation').textContent = room.name;
+    document.getElementById('dpPresence').textContent = '⚠️ Belum Check-in';
+    document.getElementById('dpNote').textContent = 'Tiada rekod kehadiran guru buat masa ini. Sila semak.';
+  } else {
+    document.getElementById('dpLocation').textContent = 'Bilik Darjah ' + room.name;
+    document.getElementById('dpPresence').textContent = '✅ Ada Guru Sedang Mengajar';
+    document.getElementById('dpNote').textContent = 'PdPc berjalan teratur mengikut sukatan.';
+  }
+
+  document.getElementById('dpActions').innerHTML = `
+    <button class="btn-checkin" style="background:var(--blue)">✏️ Kemaskini Kehadiran</button>
+    <button class="btn-checkin" style="background:var(--red)">⚠️ Tandakan Tiada Guru</button>
+  `;
+  const actionBtns = document.getElementById('dpActions').querySelectorAll('button');
+  actionBtns[0].addEventListener('click', ()=> editClass(roomId));
+  actionBtns[1].addEventListener('click', ()=> setTiadaGuru(roomId));
+
+  showPanel();
+}
+
+function openRoomDetail(roomId){
+  const room = roomOf(roomId);
+  const occ = specialRoomOccupant(roomId);
+
+  document.getElementById('dpTitle').textContent = room.icon + ' ' + room.name;
+  const badge = document.getElementById('dpStatusBadge');
+
+  if(occ){
+    const [classId, s] = occ;
+    const cls = roomOf(classId);
+    badge.textContent = '● SEDANG DIGUNAKAN';
+    badge.style.background = 'var(--blue-bg)'; badge.style.color = 'var(--blue)';
+    document.getElementById('dpTeacher').textContent = s.teacher;
+    document.getElementById('dpSubject').textContent = `${s.subject} (${cls.name})`;
+    document.getElementById('dpLocation').textContent = room.name;
+    document.getElementById('dpPresence').textContent = `👥 PdPc Membawa Murid ${cls.name}`;
+    document.getElementById('dpNote').textContent = 'Bilik sedang aktif digunakan.';
+  } else {
+    badge.textContent = '✨ BILIK KOSONG';
+    badge.style.background = '#fff7e6'; badge.style.color = '#b8790f';
+    document.getElementById('dpTeacher').textContent = '—';
+    document.getElementById('dpSubject').textContent = '—';
+    document.getElementById('dpLocation').textContent = room.name;
+    document.getElementById('dpPresence').textContent = '🟢 Sedia Digunakan';
+    document.getElementById('dpNote').textContent = 'Tiada kelas menggunakan bilik ini sekarang.';
+  }
+  document.getElementById('dpActions').innerHTML = '';
+  showPanel();
+}
+
+/* Buka semula panel semasa (untuk butang "Kembali" dari borang QR) */
+function editClass(roomId){
+  hidePanel();
+  openQrModal(roomId);
+}
+
+async function setTiadaGuru(roomId){
+  await saveRoom(roomId, {status:'TIADA_GURU', teacher:null, subject:null});
+  render();
+  hidePanel();
+  showToast(`${roomOf(roomId).name} ditandakan Tiada Guru`);
+}
+
+function showPanel(){
+  document.getElementById('detailPanel').classList.add('show');
+  document.getElementById('overlay').classList.add('show');
+}
+function hidePanel(){
+  document.getElementById('detailPanel').classList.remove('show');
+  document.getElementById('overlay').classList.remove('show');
+}
+
+/* =========================================================
+   6. QR CHECK-IN MODAL
+   ========================================================= */
+function populateQrForm(force){
+  const roomSel = document.getElementById('qrRoom');
+  const teacherSel = document.getElementById('qrTeacher');
+  const subjectSel = document.getElementById('qrSubject');
+  const berpindahSel = document.getElementById('qrBerpindahLocation');
+  if(!roomSel.dataset.filled || force){
+    roomSel.innerHTML = ROOMS.filter(r=>r.kind==='classroom').map(r=>`<option value="${r.id}">${r.name}</option>`).join('');
+    teacherSel.innerHTML = TEACHERS.map(t=>`<option>${t}</option>`).join('');
+    subjectSel.innerHTML = SUBJECTS.map(s=>`<option>${s}</option>`).join('');
+    berpindahSel.innerHTML = ROOMS.filter(r=>r.kind==='special').map(r=>`<option value="${r.id}">${r.icon} ${r.name}</option>`).join('');
+    roomSel.dataset.filled = '1';
+  }
+}
+
+/* presetRoomId: bila dibuka dari panel butiran kelas, terus pilih kelas itu
+   dan isikan guru/subjek semasa supaya senang dikemaskini */
+function openQrModal(presetRoomId){
+  populateQrForm();
+  const roomSel = document.getElementById('qrRoom');
+  const sessionSel = document.getElementById('qrSession');
+  if(presetRoomId){
+    roomSel.value = presetRoomId;
+    const s = state[presetRoomId];
+    if(s && s.teacher) document.getElementById('qrTeacher').value = s.teacher;
+    if(s && s.subject) document.getElementById('qrSubject').value = s.subject;
+    if(s && s.status === 'RELIEF') sessionSel.value = 'Guru Ganti (Relief)';
+    else if(s && s.status === 'BERPINDAH'){
+      sessionSel.value = 'Berpindah';
+      document.getElementById('qrBerpindahLocation').value = s.location;
+    } else {
+      sessionSel.value = 'Normal';
+    }
+  }
+  toggleBerpindahRow();
+  document.getElementById('qrModal').classList.add('show');
+  document.getElementById('overlay').classList.add('show');
+}
+function closeQrModal(){
+  document.getElementById('qrModal').classList.remove('show');
+  document.getElementById('overlay').classList.remove('show');
+}
+function toggleBerpindahRow(){
+  const isBerpindah = document.getElementById('qrSession').value === 'Berpindah';
+  document.getElementById('qrBerpindahRow').style.display = isBerpindah ? 'block' : 'none';
+}
+
+/* =========================================================
+   6b. SETTINGS MODAL — tetapkan pautan Google Sheet
+   ========================================================= */
+function openSettingsModal(){
+  document.getElementById('gasUrlInput').value = GAS_URL;
+  document.getElementById('settingsModal').classList.add('show');
+  document.getElementById('overlay').classList.add('show');
+}
+function closeSettingsModal(){
+  document.getElementById('settingsModal').classList.remove('show');
+  document.getElementById('overlay').classList.remove('show');
+}
+function saveSettings(){
+  const url = document.getElementById('gasUrlInput').value.trim();
+  GAS_URL = url;
+  localStorage.setItem(GAS_URL_KEY, url);
+  closeSettingsModal();
+  showToast(url ? 'Pautan Google Sheet disimpan — memuatkan data...' : 'Pautan dikosongkan — Mod Tempatan diaktifkan');
+  refreshState();
+}
+
+async function resetBoard(){
+  if(!confirm('Kosongkan SEMUA petak kelas kepada "Tiada Guru"? Tindakan ini tidak boleh dibatalkan.')) return;
+  const empty = defaultState();
+  for(const roomId of Object.keys(empty)){
+    await saveRoom(roomId, empty[roomId]);
+  }
+  render();
+  closeSettingsModal();
+  showToast('Papan telah direset ke kosong');
+}
+
+/* =========================================================
+   6c. TEACHER MANAGEMENT — tambah/padam nama guru.
+   Jika disambung Google Sheet: disimpan dalam tab "Teachers"
+   dan dikongsi semua peranti. Jika tidak: localStorage sahaja.
+   ========================================================= */
+function saveTeachersLocal(){
+  localStorage.setItem(TEACHERS_KEY, JSON.stringify(TEACHERS));
+}
+
+async function refreshTeachers(){
+  if(GAS_URL){
+    try{
+      const res = await fetch(GAS_URL + '?type=teachers');
+      const list = await res.json();
+      if(Array.isArray(list) && list.length) TEACHERS = list;
+    }catch(err){ console.error('Gagal muat senarai guru:', err); }
+  }
+  renderTeacherList();
+  populateQrForm(true); // paksa isi semula dropdown guru
+}
+
+function renderTeacherList(){
+  const wrap = document.getElementById('teacherListWrap');
+  if(!wrap) return;
+  wrap.innerHTML = TEACHERS.map(name => `
+    <div style="display:flex;align-items:center;justify-content:space-between;border:1px solid var(--line);border-radius:10px;padding:9px 12px">
+      <span style="font-size:13px;font-weight:600">${name}</span>
+      <button data-name="${name.replace(/"/g,'&quot;')}" class="delTeacherBtn" style="border:none;background:var(--red-bg);color:var(--red);border-radius:8px;width:28px;height:28px;cursor:pointer;font-weight:800">✕</button>
+    </div>`).join('') || `<p style="font-size:12.5px;color:var(--ink-soft)">Tiada guru dalam senarai lagi.</p>`;
+  wrap.querySelectorAll('.delTeacherBtn').forEach(btn=>{
+    btn.addEventListener('click', ()=> deleteTeacher(btn.dataset.name));
+  });
+}
+
+async function addTeacher(){
+  const input = document.getElementById('newTeacherInput');
+  const name = input.value.trim();
+  if(!name) return;
+  if(TEACHERS.includes(name)){ showToast('Nama guru ini sudah ada'); return; }
+  TEACHERS.push(name);
+  saveTeachersLocal();
+  input.value = '';
+  renderTeacherList();
+  populateQrForm(true);
+  if(GAS_URL){
+    try{
+      await fetch(GAS_URL, { method:'POST', body: JSON.stringify({action:'addTeacher', name}) });
+    }catch(err){ showToast('⚠️ Gagal simpan ke Google Sheet'); }
+  }
+  showToast(`${name} ditambah`);
+}
+
+async function deleteTeacher(name){
+  if(!confirm(`Padam "${name}" daripada senarai guru?`)) return;
+  TEACHERS = TEACHERS.filter(t => t !== name);
+  saveTeachersLocal();
+  renderTeacherList();
+  populateQrForm(true);
+  if(GAS_URL){
+    try{
+      await fetch(GAS_URL, { method:'POST', body: JSON.stringify({action:'deleteTeacher', name}) });
+    }catch(err){ showToast('⚠️ Gagal simpan ke Google Sheet'); }
+  }
+  showToast(`${name} dipadam`);
+}
+
+function openTeacherModal(){
+  renderTeacherList();
+  document.getElementById('teacherModal').classList.add('show');
+  document.getElementById('overlay').classList.add('show');
+}
+function closeTeacherModal(){
+  document.getElementById('teacherModal').classList.remove('show');
+  document.getElementById('overlay').classList.remove('show');
+}
+
+/* =========================================================
+   6d. QR CODES SEBENAR — jana kod QR untuk setiap kelas,
+   boleh dicetak dan ditampal di pintu kelas. Setiap kod
+   mengandungi teks "CLASSPULSE:<roomId>".
+   ========================================================= */
+function openPrintQrModal(){
+  const grid = document.getElementById('qrGrid');
+  grid.innerHTML = '';
+  ROOMS.filter(r=>r.kind==='classroom').forEach(room=>{
+    const tile = document.createElement('div');
+    tile.className = 'qr-tile';
+    const qrBox = document.createElement('div');
+    tile.appendChild(qrBox);
+    const label = document.createElement('div');
+    label.className = 'qr-label';
+    label.textContent = room.name;
+    tile.appendChild(label);
+    grid.appendChild(tile);
+    new QRCode(qrBox, { text: 'CLASSPULSE:' + room.id, width:150, height:150 });
+  });
+  document.getElementById('printQrModal').classList.add('show');
+  document.getElementById('overlay').classList.add('show');
+}
+function closePrintQrModal(){
+  document.getElementById('printQrModal').classList.remove('show');
+  document.getElementById('overlay').classList.remove('show');
+}
+
+/* =========================================================
+   6e. PENGESANAN IMBASAN SCANNER FIZIKAL
+   Alat pengimbas barcode/QR USB bertindak sebagai papan kekunci —
+   ia "menaip" kandungan kod dengan pantas diikuti Enter. Kod di
+   bawah mengumpul taipan pantas itu dan membezakannya daripada
+   taipan biasa oleh pengguna (guna jurang masa antara kekunci).
+   ========================================================= */
+let scanBuffer = '';
+let lastKeyTime = 0;
+document.addEventListener('keydown', function(e){
+  // abaikan bila pengguna sedang menaip dalam input/select/textarea
+  const tag = (e.target.tagName || '').toLowerCase();
+  if(tag === 'input' || tag === 'select' || tag === 'textarea') return;
+
+  const now = Date.now();
+  if(now - lastKeyTime > 80) scanBuffer = ''; // jurang > 80ms = bukan scanner, mula semula
+  lastKeyTime = now;
+
+  if(e.key === 'Enter'){
+    if(scanBuffer.startsWith('CLASSPULSE:')){
+      const roomId = scanBuffer.replace('CLASSPULSE:', '').trim();
+      if(roomOf(roomId)){
+        editClass(roomId);
+        showToast(`Kod diimbas: ${roomOf(roomId).name}`);
+      }
+    }
+    scanBuffer = '';
+  } else if(e.key.length === 1){
+    scanBuffer += e.key;
+  }
+});
+
+async function submitCheckin(){
+  const roomId = document.getElementById('qrRoom').value;
+  const teacher = document.getElementById('qrTeacher').value;
+  const subject = document.getElementById('qrSubject').value;
+  const session = document.getElementById('qrSession').value;
+
+  let entry;
+  if(session === 'Berpindah'){
+    const location = document.getElementById('qrBerpindahLocation').value;
+    entry = {status:'BERPINDAH', teacher, subject, location};
+  } else if(session === 'Guru Ganti (Relief)'){
+    entry = {status:'RELIEF', teacher, subject};
+  } else {
+    entry = {status:'ADA_GURU', teacher, subject};
+  }
+  await saveRoom(roomId, entry);
+  render();
+  closeQrModal();
+  showToast(`Check-in berjaya: ${teacher} → ${roomOf(roomId).name}`);
+}
+
+function showToast(msg){
+  const t = document.getElementById('toast');
+  t.textContent = msg;
+  t.classList.add('show');
+  setTimeout(()=>t.classList.remove('show'), 2600);
+}
+
+/* =========================================================
+   7. SEARCH FILTER
+   ========================================================= */
+function applyFilter(query){
+  query = (query||'').trim().toLowerCase();
+  document.querySelectorAll('.card').forEach(card=>{
+    const match = !query || card.dataset.search.includes(query);
+    card.classList.toggle('dim', !match);
+  });
+}
+
+/* =========================================================
+   8. ZOOM
+   ========================================================= */
+function applyZoom(){
+  document.getElementById('colClasses').style.transform = `scale(${zoom})`;
+}
+
+/* =========================================================
+   9. CLOCK
+   ========================================================= */
+function renderClock(){
+  const now = new Date();
+  const days = ['AHAD','ISNIN','SELASA','RABU','KHAMIS','JUMAAT','SABTU'];
+  document.getElementById('dayLabel').textContent = days[now.getDay()];
+  document.getElementById('timeLabel').textContent = now.toLocaleTimeString('ms-MY',{hour:'2-digit',minute:'2-digit'});
+  document.getElementById('slotLabel').textContent = 'SLOT ' + (Math.min(9, Math.max(1, now.getHours()-6)));
+}
+
+/* =========================================================
+   10. EVENTS
+   ========================================================= */
+document.getElementById('dpClose').addEventListener('click', hidePanel);
+document.getElementById('overlay').addEventListener('click', ()=>{ hidePanel(); closeQrModal(); closeSettingsModal(); closeTeacherModal(); closePrintQrModal(); });
+document.getElementById('openQrBtn').addEventListener('click', ()=> openQrModal());
+document.getElementById('printQrBtn').addEventListener('click', openPrintQrModal);
+document.getElementById('printQrClose').addEventListener('click', closePrintQrModal);
+document.getElementById('printQrNow').addEventListener('click', ()=> window.print());
+document.getElementById('qrClose').addEventListener('click', closeQrModal);
+document.getElementById('qrSubmit').addEventListener('click', submitCheckin);
+document.getElementById('qrSession').addEventListener('change', toggleBerpindahRow);
+document.getElementById('settingsBtn').addEventListener('click', openSettingsModal);
+document.getElementById('settingsClose').addEventListener('click', closeSettingsModal);
+document.getElementById('settingsSave').addEventListener('click', saveSettings);
+document.getElementById('settingsReset').addEventListener('click', resetBoard);
+document.getElementById('teachersBtn').addEventListener('click', openTeacherModal);
+document.getElementById('teacherClose').addEventListener('click', closeTeacherModal);
+document.getElementById('addTeacherBtn').addEventListener('click', addTeacher);
+document.getElementById('newTeacherInput').addEventListener('keydown', e=>{ if(e.key==='Enter') addTeacher(); });
+document.getElementById('searchBox').addEventListener('input', e=> applyFilter(e.target.value));
+document.getElementById('zoomIn').addEventListener('click', ()=>{ zoom = Math.min(1.4, zoom+0.1); applyZoom(); });
+document.getElementById('zoomOut').addEventListener('click', ()=>{ zoom = Math.max(0.6, zoom-0.1); applyZoom(); });
+document.getElementById('zoomReset').addEventListener('click', ()=>{ zoom = 1; applyZoom(); });
+
+/* =========================================================
+   11. INIT
+   ========================================================= */
+renderClock();
+setInterval(renderClock, 30000);
+refreshState();                        // muatkan data semasa mula-mula dibuka
+refreshTeachers();                     // muatkan senarai guru semasa mula-mula dibuka
+setInterval(refreshState, 20000);      // auto-segar setiap 20 saat supaya semua peranti "live"
+</script>
+</body>
+</html>
